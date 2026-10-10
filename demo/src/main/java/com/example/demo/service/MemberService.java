@@ -9,14 +9,17 @@ import org.springframework.stereotype.Service;
 
 import com.example.demo.model.Member;
 import com.example.demo.repository.MemberRepository;
+
+import jakarta.transaction.Transactional;
 @Service
 public  class MemberService{
         private MemberRepository MemRepo;
-
+        private StatService statSer;
    
 
-    public MemberService(MemberRepository MemRepo) {
+    public MemberService(MemberRepository MemRepo,StatService statSer) {
         this.MemRepo = MemRepo;
+        this.statSer=statSer;
     }
 
     public Optional<Member> getMemberById(UUID id){
@@ -26,11 +29,19 @@ public  class MemberService{
     public List<Member> getAllMembers(){
         return this.MemRepo.findAll();
     }
+
+    //see the propagation later 
+    @Transactional
     public Member createMember(Member mem){
+        this.statSer.updateNewClientNb();
         return this.MemRepo.save(mem);
     }
+    
 
+    //also see the propagation later 
+    @Transactional
     public void renewDates(int month,String phoneNumber) {
+        this.statSer.updateStat(month);
         LocalDate startDate = LocalDate.now();
         LocalDate endDate = startDate.plusDays(month * 30);
         Optional<Member> optionalMember = this.MemRepo.findByPhoneNumber(phoneNumber);

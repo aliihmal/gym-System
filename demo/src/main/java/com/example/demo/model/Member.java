@@ -33,12 +33,7 @@ public class Member {
     public Member() {
     }
 
-    public Member(
-            String name,
-            String phoneNumber,
-            LocalDate membershipStart,
-            LocalDate membershipEnd
-    ) {
+    public Member(String name, String phoneNumber,LocalDate membershipStart, LocalDate membershipEnd) {
         this.name = name;
         this.phoneNumber = phoneNumber;
         this.membershipStart = membershipStart;

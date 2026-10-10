@@ -18,8 +18,16 @@ interface DashboardData {
   expiringSoon: Member[];
 }
 
+interface MonthStats {
+  revenue: number;
+  renewals: number;
+  newClients: number;
+}
+
 // TODO: change if your backend runs elsewhere (or use a Vite proxy and set this to "")
 const API_URL = "http://localhost:8080";
+// TODO: change the currency symbol to match your gym
+const CURRENCY = "$";
 const EXPIRING_DAYS = 7;
 const LIST_SIZE = 6;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -65,11 +73,31 @@ export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [month, setMonth] = useState<MonthStats | null>(null);
+  const [monthError, setMonthError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setMonthError(null);
+
+    // Monthly stats load on their own, so a failure here doesn't hide the member data
+    const loadMonth = async () => {
+      try {
+        const [revenue, renewals, newClients] = await Promise.all([
+          get<number>("/stat/getMonthlyRev"),
+          get<number>("/stat/NbOfRenewl"),
+          get<number>("/stat/NbOfNewClient"),
+        ]);
+        setMonth({ revenue, renewals, newClients });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "Unknown error";
+        setMonthError(`Couldn't load this month's numbers. ${reason}.`);
+      }
+    };
+
     try {
+      const monthDone = loadMonth();
       const [total, active, expired, expiringSoon] = await Promise.all([
         get<number>("/member/MembersNumber"),
         get<number>("/member/ActiveMemberNumber"),
@@ -77,6 +105,7 @@ export default function Home() {
         get<Member[]>(`/member/ExpiringSoon?days=${EXPIRING_DAYS}`),
       ]);
       setData({ total, active, expired, expiringSoon });
+      await monthDone;
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Unknown error";
       setError(`Couldn't load the dashboard. ${reason}. Check that the backend is running and allows requests from this page.`);
@@ -99,6 +128,8 @@ export default function Home() {
   );
 
   const show = (n: number | undefined) => (loading || n === undefined ? "–" : n);
+  const newOrRenewTotal = month ? month.renewals + month.newClients : 0;
+  const renewPct = month && newOrRenewTotal > 0 ? Math.round((month.renewals / newOrRenewTotal) * 100) : 0;
   const activePct = data && data.total > 0 ? Math.round((data.active / data.total) * 100) : 0;
 
   return (
@@ -143,6 +174,48 @@ export default function Home() {
           <span className="stat-label">Expired</span>
           <span className="stat-value">{show(data?.expired.length)}</span>
         </Link>
+      </section>
+
+      <section className="card month">
+        <h2>This month</h2>
+        {monthError && (
+          <div className="msg err" role="status">{monthError}</div>
+        )}
+        {!monthError && (
+          <>
+            <div className="month-grid">
+              <div className="figure revenue">
+                <span className="stat-label">Revenue</span>
+                <span className="stat-value">
+                  {month ? `${CURRENCY}${month.revenue.toLocaleString()}` : "–"}
+                </span>
+              </div>
+              <div className="figure">
+                <span className="stat-label">Renewals</span>
+                <span className="stat-value">{month ? month.renewals : "–"}</span>
+              </div>
+              <div className="figure">
+                <span className="stat-label">New clients</span>
+                <span className="stat-value">{month ? month.newClients : "–"}</span>
+              </div>
+            </div>
+
+            {month && newOrRenewTotal > 0 && (
+              <div className="split">
+                <div className="bar" role="img" aria-label={`${renewPct} percent renewals, ${100 - renewPct} percent new clients`}>
+                  <div className="bar-fill" style={{ width: `${renewPct}%` }} />
+                </div>
+                <div className="legend">
+                  <span><i className="dot renew" /> Renewals {renewPct}%</span>
+                  <span><i className="dot fresh" /> New clients {100 - renewPct}%</span>
+                </div>
+              </div>
+            )}
+            {month && newOrRenewTotal === 0 && (
+              <div className="empty">No renewals or new clients yet this month.</div>
+            )}
+          </>
+        )}
       </section>
 
       {data && data.total > 0 && (
